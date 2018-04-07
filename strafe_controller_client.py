@@ -14,8 +14,9 @@ def exit():
     curses.echo()
     curses.endwin()
 
-
 def main_loop(args):
+    # Intitalize pan and tilt
+    strafe = 1500
     pan = args.pan
     if args.pan is None:
         pan = np.random.uniform(args.pan_min, args.tilt_max)
@@ -29,46 +30,37 @@ def main_loop(args):
     use_max = (args.switching_mode == 0)
 
     k_controller = keyboard_controller(
-        args.pt_host, args.pt_port, myscreen,
-        pan_limits=[args.pan_min, args.pan_max],
-        tilt_limits=[args.tilt_min, args.tilt_max])
+        args.pt_host, args.pt_port, myscreen)
 
     tp_controller = perplexity_controller(
         args.pt_host, args.pt_port, myscreen, args.sunshine_host,
         args.sunshine_port, args.decay_rate, "topic_perplexity", use_max,
-        pan_limits=[args.pan_min, args.pan_max],
-        tilt_limits=[args.tilt_min, args.tilt_max],
-        pan_gains=p_gains, tilt_gains=t_gains)
+        strafe_gains=t_gains)
 
     wp_controller = perplexity_controller(
         args.pt_host, args.pt_port, myscreen, args.sunshine_host,
         args.sunshine_port, args.decay_rate, "word_perplexity", use_max,
-        pan_limits=[args.pan_min, args.pan_max],
-        tilt_limits=[args.tilt_min, args.tilt_max],
-        pan_gains=p_gains, tilt_gains=t_gains)
+        strafe_gains=t_gains)
 
     mp_controller = perplexity_controller(
         args.pt_host, args.pt_port, myscreen, args.sunshine_host,
         args.sunshine_port, args.decay_rate, "both", use_max,
-        pan_limits=[args.pan_min, args.pan_max],
-        tilt_limits=[args.tilt_min, args.tilt_max],
-        pan_gains=p_gains,
-        tilt_gains=t_gains)
+        strafe_gains=t_gains)
 
-    c = ord('m')
+    c = ord('k')
     while c != ord('q'):
         if c == ord('k'):
-            k_controller.connect()
-            (pan, tilt) = k_controller.run(pan, tilt)
+            k_controller.connect_pymvalink()
+            (strafe) = k_controller.run(strafe)
         elif c == ord('t'):
             tp_controller.connect()
-            (pan, tilt) = tp_controller.run(pan, tilt)
+            (strafe) = tp_controller.run(strafe)
         elif c == ord('w'):
             wp_controller.connect()
-            (pan, tilt) = wp_controller.run(pan, tilt)
+            (strafe) = wp_controller.run(strafe)
         elif c == ord('m'):
             mp_controller.connect()
-            (pan, tilt) = mp_controller.run(pan, tilt)
+            (strafe) = mp_controller.run(strafe)
 
         myscreen.refresh()
         myscreen.addstr(3, 5, "Press 'k' for keyboard control")
@@ -82,10 +74,10 @@ def main_loop(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="A UDP client for controlling pan tilt unit with a beaglebone, either from keyboard input or a set of autonomous controllers")
+    parser = argparse.ArgumentParser(description="A UDP client for controlling BlueROV strafe, either from keyboard input or a set of autonomous controllers")
 
-    parser.add_argument('--pt_host', help="the hostname or ip or address of the pan tilt controller", type=str, default='localhost')
-    parser.add_argument('--pt_port', help="the UDP port number of the pan tilt controller", type=int, default=5005)
+    parser.add_argument('--pt_host', help="the hostname or ip or address of the pan tilt controller", type=str, default='192.168.2.1')
+    parser.add_argument('--pt_port', help="the UDP port number of the pan tilt controller", type=int, default=14550)
     parser.add_argument('--sunshine_host', help="the hostname or ip address of the perplexity stream", type=str, default='localhost')
     parser.add_argument('--sunshine_port', help="the TCP port number of the perplexity stream", type=int, default=9001)
     parser.add_argument('--decay_rate', help="the decay rate for the perplexity threshold", type=float, default=0.999)

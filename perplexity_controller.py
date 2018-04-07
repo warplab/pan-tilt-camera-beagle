@@ -4,32 +4,30 @@ import socket
 import operator
 import time
 import numpy as np
-from pan_tilt_camera_controller import pan_tilt_camera_controller
+from strafe_controller import strafe_controller
 import curses
 
 
-class perplexity_controller(pan_tilt_camera_controller):
-    def __init__(self, pan_tilt_host="localhost", pan_tilt_port=5005,
+class perplexity_controller(strafe_controller):
+    def __init__(self, strafe_host="192.168.2.1", strafe_port=14550,
                  curses_screen=None, perplexity_host="localhost",
                  perplexity_port=9001, boredom_rate=0.999,
                  ptype="topic_perplexity", use_max=False,
-                 pan_limits=[0, 180], tilt_limits=[0, 180],
-                 pan_gains=[5.0, 0.0, 0.0], tilt_gains=[-1.0, 0.0, 0.0]):
+                 strafe_gains=[5.0, 0.0, 0.0]):
 
         super(perplexity_controller, self).__init__(
-            pan_tilt_host, pan_tilt_port, curses_screen, pan_limits,
-            tilt_limits)
+            strafe_host, strafe_port, curses_screen)
 
         self.tcp_sock = None
         self.tcp_host = perplexity_host
         self.tcp_port = int(perplexity_port)
 
-        self.kp = np.array([pan_gains[0], tilt_gains[0]], dtype=np.float64)
-        self.ki = np.array([pan_gains[1], tilt_gains[1]], dtype=np.float64)
-        self.kd = np.array([pan_gains[2], tilt_gains[2]], dtype=np.float64)
+        self.kp = np.array([strafe_gains[0]], dtype=np.float64)
+        self.ki = np.array([strafe_gains[1]], dtype=np.float64)
+        self.kd = np.array([strafe_gains[2]], dtype=np.float64)
 
-        self.previous_error = np.array([0, 0], dtype=np.float64)
-        self.integral_error = np.array([0, 0], dtype=np.float64)
+        self.previous_error = np.array([0], dtype=np.float64)
+        self.integral_error = np.array([0], dtype=np.float64)
         self.curr_time = time.time()
 
         self.perplexity_threshold = 1.0
@@ -45,7 +43,10 @@ class perplexity_controller(pan_tilt_camera_controller):
         self.connected = False
 
     def connect(self):
-        super(perplexity_controller, self).connect()
+        # Connect to BlueROV
+        super(perplexity_controller, self).connect_pymvalink()
+
+        # Connect to ROST
         if self.tcp_sock is not None:
             self.disconnect()
 
@@ -59,14 +60,16 @@ class perplexity_controller(pan_tilt_camera_controller):
             return False
 
     def disconnect(self):
+        # Disconnect ROST 
         self.tcp_sock.close()
         self.tcp_sock = None
-        super(perplexity_controller, self).disconnect()
+        # Disconnect to BlueROV
+        super(perplexity_controller, self).disconnect_pymvalink()
 
     def get_max_perplexity_coords(self, perplexity_dict,
-                                  ptype="topic_perplexity", image_width=640,
-                                  image_height=480, hfov=90, vfov=90,
-                                  normalized=True, smoothing=False):
+                                  ptype="topic_perplexity", image_width=640.0,
+                                  image_height=480.0, hfov=90, vfov=90,
+                                  normalized=False, smoothing=False):
         rows = int(perplexity_dict['rows'])
         cols = int(perplexity_dict['cols'])
         N = rows*cols
@@ -126,17 +129,38 @@ class perplexity_controller(pan_tilt_camera_controller):
         return (p_x, p_y, max_val)
 
     def get_control(self, error):
+        msg = "                                               "
+        self.myscreen.addstr(18, 25, msg)
+        if error < -100: 
+            msg = "Nudging left: %f"
+            self.myscreen.addstr(18, 25, msg % (error))
+    	    self.send_strafe_command(1400)
+            return 'L'
+        elif error > 100: 
+            msg = "Nudging right: %f"
+            self.myscreen.addstr(18, 25, msg % (error))
+	    self.send_strafe_command(1600)
+            return 'R'
+        else: 
+            msg = "Staying in center: %f"
+            self.myscreen.addstr(18, 25, msg % (error))
+	    self.send_strafe_command(1500)
+            return 'C'
+
+        '''
         dt = time.time() - self.curr_time
         self.curr_time = time.time()
         de = error-self.previous_error
         self.previous_error = error
-        self.integral_error += error*dt
+        #self.integral_error += error*dt
+        self.integral_error = 0
 
         command = self.kp*error + self.ki*self.integral_error + self.kd*de/dt
 
         return command
+        '''
 
-    def run(self, pan_init=90.0, tilt_init=90.0):
+    def run(self, strafe_init = 1500):
         infile = self.tcp_sock.makefile()
 
         self.myscreen.clear()
@@ -144,9 +168,8 @@ class perplexity_controller(pan_tilt_camera_controller):
         self.myscreen.addstr(6, 5, "Press 'q' to go back.")
         self.myscreen.nodelay(1)
         c = ''
-        self.pan = pan_init
-        self.tilt = tilt_init
-        self.send_pan_tilt_command(self.pan, self.tilt)
+        self.strafe = strafe_init 
+        self.send_strafe_command(self.strafe)
 
         iters = 0
 
@@ -155,7 +178,7 @@ class perplexity_controller(pan_tilt_camera_controller):
             self.myscreen.refresh()
             c = self.myscreen.getch()
             self.myscreen.addstr(
-                12, 25, "Pan: %f Tilt: %f" % (self.pan, self.tilt))
+                12, 25, "Strafe: %f " % (self.strafe))
             if not self.connected:
                 try:
                     self.tcp_sock.connect((self.tcp_host, self.tcp_port))
@@ -164,11 +187,6 @@ class perplexity_controller(pan_tilt_camera_controller):
                     self.myscreen.addstr(
                         14, 25,
                         "Connected!                                    ")
-                    self.pan = np.random.uniform(
-                        self.pan_limits[0], self.pan_limits[1])
-                    self.tilt = np.random.uniform(
-                        self.tilt_limits[0], self.tilt_limits[1])
-                    self.send_pan_tilt_command(self.pan, self.tilt)
                     time.sleep(1.0)
                     continue
                 except socket.error as e:
@@ -221,8 +239,22 @@ class perplexity_controller(pan_tilt_camera_controller):
                 self.myscreen.addstr(14, 25, msg % (self.perplexity_threshold))
                 msg = "                                               "
                 self.myscreen.addstr(15, 25, msg)
+
                 msg = "Perplexity of target point: %f"
                 self.myscreen.addstr(15, 25, msg % (max_perplexity_px[2]))
+                msg = "                                               "
+                self.myscreen.addstr(16, 25, msg)
+
+                msg = "Max perplexity pixel loc: %s"
+                self.myscreen.addstr(16, 25, msg % (str(max_perplexity_px[:2])))
+                
+                error = np.array(max_perplexity_px[:2])
+                control = self.get_control(error[0])
+
+                msg = "                                               "
+                self.myscreen.addstr(17, 25, msg)
+                msg = "Control: %s"
+                self.myscreen.addstr(17, 25, msg % (str(control)))
 
                 if max_perplexity_px[2] > self.perplexity_threshold:
                     self.perplexity_threshold = max_perplexity_px[2]
@@ -230,48 +262,28 @@ class perplexity_controller(pan_tilt_camera_controller):
                 else:
                     self.perplexity_threshold *= self.boredom_rate
                     continue
+
+
             except ValueError:
                 continue
 
             # the error is how far the max perxplexity coordinates are from
             # the center of the image
-            if max_perplexity_px[2] > self.perplexity_threshold:
-                error = -np.array(max_perplexity_px[:2])
-                control = self.get_control(error)
+            #if max_perplexity_px[2] > self.perplexity_threshold:
+            '''
+            error = np.array(max_perplexity_px[:2])
+            control = self.get_control(error[0])
 
-                if self.pan > self.pan_limits[1]:
-                    # hack!
-                    if self.pan > 180.0:
-                        self.pan = 0.0
-                        self.tilt = 180 - self.tilt
-                    else:
-                        self.pan = self.pan_limits[1]
-                if self.pan < self.pan_limits[0]:
-                    # hack!
-                    if self.pan < 0.0:
-                        self.pan = 180.0
-                        self.tilt = 180 - self.tilt
-                    else:
-                        self.pan = self.pan_limits[0]
-                if self.tilt > self.tilt_limits[1]:
-                    self.tilt = self.tilt_limits[1]
-                if self.tilt < self.tilt_limits[0]:
-                    self.tilt = self.tilt_limits[0]
+            msg = "                                               "
+            self.myscreen.addstr(17, 25, msg)
+            msg = "Control: %s"
+            self.myscreen.addstr(17, 25, msg % (str(control)))
+            '''
 
-                self.pan += control[0]*self.pan_speed
-                self.tilt += control[1]*self.tilt_speed
-
-                if not self.send_pan_tilt_command(self.pan, self.tilt):
-                    self.myscreen.addstr(
-                        18, 25,
-                        "Could not send command, camera might be offline")
-                else:
-                    self.myscreen.addstr(
-                        18, 25,
-                        "CAMERA OK                                       ")
 
         self.disconnect()
+        self.disconnect_pymvalink()
         self.myscreen.clear()
         curses.flushinp()
         self.myscreen.nodelay(0)
-        return (self.pan, self.tilt)
+        return (self.strafe)
