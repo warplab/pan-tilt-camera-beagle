@@ -4,7 +4,7 @@ strafe_controller_client.py is used to send motor commands to the BlueROV2, eith
 perplexity_controller.py listens to perplexity json messages over a tcp socket and sends commands to the BlueROV (using rost-cli)
 
 ## Example
-First, start an MJPEG image stream on the BlueROV, output to port 8080:
+First, start an MJPEG image stream on the BlueROV, output to port 8080 ([e.g. this MJPEG streamer](https://github.com/jacksonliam/mjpg-streamer))
   
   ```./mjpg_streamer -i "input_raspicam.so -x 640 -y 480 -fps 15" -o "output_http.so -p 8080" ``` or
    ```./mjpg_streamer -i "input_uvc.so -d /dev/video0 -x 640 -y 480 -fps 15" -o "output_http.so -p 8080" ```
