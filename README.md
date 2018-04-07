@@ -14,7 +14,7 @@ Then, compile rost-cli and run sunshine:
     cd <PATH_TO_ROST_CLI>/bin
     ./sunshine --mjpgstream=192.168.2.2 --mjpgstream.port=8080 --mjpgstream.path='/?action=stream' --hdp -K 32 --header=" " --footer=" " --broadcaster.port=9001 --cell.space=32
 
-Then, run the perplexity controller:
+Then, open QGroundConntrol with a joystick connected (for emergency override) and run the perplexity controller:
 
     cd <PATH_TO_THIS_REPO>
     ./strafe_controller_client.py
