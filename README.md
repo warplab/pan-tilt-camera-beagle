@@ -1,22 +1,24 @@
-# Servo controller for a pan tilt camera using a beaglebone black
+# Strafe controller for the BlueROV
+strafe_controller_client.py is used to send motor commands to the BlueROV2, either based on keyboard commands or the computed maximum perplexity pixel in a ROST image stream
 
-pan_tilt_camera_server.py runs on the beaglebone black
-
-pan_tilt_camera_client.py is used to send keyboard commands to the beaglebone
-
-perplexity_controller.py listens to perplexity json messages over a tcp socket and sends commands to the beaglebone (using rost-cli)
-
+perplexity_controller.py listens to perplexity json messages over a tcp socket and sends commands to the BlueROV (using rost-cli)
 
 ## Example
+First, start an MJPEG image stream on the BlueROV, output to port 8080:
+  
+  ```./mjpg_streamer -i "input_raspicam.so -x 640 -y 480 -fps 15" -o "output_http.so -p 8080" ``` or
+   ```./mjpg_streamer -i "input_uvc.so -d /dev/video0 -x 640 -y 480 -fps 15" -o "output_http.so -p 8080" ```
 
-First, compile rost-cli (requires OpenCV 2.4.X) and  run sunshine
+Then, compile rost-cli and run sunshine:
+    
     cd <PATH_TO_ROST_CLI>/bin
-    ./sunshine --camera 0 --cell.space=32 --threads=6 --broadcaster.port=9001
+    ./sunshine --mjpgstream=192.168.2.2 --mjpgstream.port=8080 --mjpgstream.path='/?action=stream' --hdp -K 32 --header=" " --footer=" " --broadcaster.port=9001 --cell.space=32
 
-Then, run the perplexity controller
+Then, run the perplexity controller:
+
     cd <PATH_TO_THIS_REPO>
-    ./pan_tilt_camera_client.py --sunshine_port 9001 --pt_host localhost --pt_port 9003 --decay_rate 0.1 --pan_kp 4.0 --pan_ki 0.2 --pan_kd 0.1 --tilt_kp -4.00 --tilt_ki 0.1 --tilt_kd 0.1 --pan 90 --tilt 90
+    ./strafe_controller_client.py
 
-Run `./pan_tilt_camera_client --help` for a description of the arguments.
+Run `./strafe_controller_client --help` for a description of the arguments.
 
 
